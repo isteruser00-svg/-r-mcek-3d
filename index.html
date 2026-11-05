@@ -1,0 +1,410 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Hyper-Realistic 3D Spider Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #f5f5f7;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div id="webgl-container"></div>
+
+    <!-- Header Overlay -->
+    <div class="fixed top-5 left-1/2 -translate-x-1/2 text-center pointer-events-none z-10 w-full px-4">
+        <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 drop-shadow-sm">
+            REALISTIC 3D ARACHNID SIMULATOR
+        </h1>
+        <p class="text-xs text-slate-500 font-medium mt-1 bg-white/80 px-4 py-1.5 rounded-full shadow-sm border border-slate-200/80 backdrop-blur-md inline-block">
+            Touch/drag on screen or move cursor to lead the spider
+        </p>
+    </div>
+
+    <!-- Telemetry Panel -->
+    <div class="fixed bottom-4 left-4 z-10 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-2xl p-3.5 text-xs text-slate-600 shadow-xl hidden sm:block">
+        <div class="font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Inverse Kinematics Active
+        </div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-0.5 font-mono text-[11px] text-slate-500">
+            <div>FPS: <span id="infoFps" class="text-slate-900 font-semibold">60</span></div>
+            <div>GAIT: <span id="infoGait" class="text-slate-900 font-semibold">ALTERNATING TRIPOD</span></div>
+            <div>POS X: <span id="infoX" class="text-slate-900 font-semibold">0.00</span></div>
+            <div>POS Z: <span id="infoZ" class="text-slate-900 font-semibold">0.00</span></div>
+        </div>
+    </div>
+
+    <!-- Menu Toggle -->
+    <button id="toggleMenuBtn" class="fixed top-4 right-4 z-20 bg-white/90 hover:bg-white text-slate-700 border border-slate-200/80 p-3 rounded-2xl shadow-lg backdrop-blur-md transition-all active:scale-95 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+        </svg>
+        <span class="text-xs font-semibold hidden md:inline">Settings</span>
+    </button>
+
+    <!-- Settings Drawer -->
+    <div id="controlsPanel" class="fixed top-16 right-4 z-20 w-80 max-h-[82vh] overflow-y-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-2xl p-5 shadow-2xl transition-all duration-300 opacity-0 pointer-events-none transform translate-y-3">
+        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2 flex justify-between items-center">
+            <span>Simulation Parameters</span>
+            <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">Three.js</span>
+        </h2>
+
+        <div class="space-y-4 text-xs">
+            <!-- Camera View Select -->
+            <div>
+                <label class="block mb-1.5 font-medium text-slate-700">Camera Mode</label>
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button class="cam-btn py-2 rounded-xl border border-slate-900 bg-slate-900 text-white font-medium text-[11px] transition shadow-sm" data-cam="orbit">Orbit</button>
+                    <button class="cam-btn py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-medium text-[11px] transition" data-cam="follow">Follow</button>
+                    <button class="cam-btn py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-medium text-[11px] transition" data-cam="top">Top</button>
+                </div>
+            </div>
+
+            <!-- Walk Speed -->
+            <div>
+                <div class="flex justify-between mb-1 text-slate-700">
+                    <label for="speedSlider" class="font-medium">Movement Speed</label>
+                    <span id="speedVal" class="font-mono text-slate-500">0.12</span>
+                </div>
+                <input type="range" id="speedSlider" min="0.04" max="0.25" step="0.01" value="0.12" class="w-full accent-slate-900 bg-slate-200 rounded-lg cursor-pointer h-1.5">
+            </div>
+
+            <!-- Step Height -->
+            <div>
+                <div class="flex justify-between mb-1 text-slate-700">
+                    <label for="stepHeightSlider" class="font-medium">Step Lift Height</label>
+                    <span id="stepHeightVal" class="font-mono text-slate-500">0.5</span>
+                </div>
+                <input type="range" id="stepHeightSlider" min="0.2" max="1.2" step="0.05" value="0.5" class="w-full accent-slate-900 bg-slate-200 rounded-lg cursor-pointer h-1.5">
+            </div>
+
+            <!-- Spider Scale -->
+            <div>
+                <div class="flex justify-between mb-1 text-slate-700">
+                    <label for="scaleSlider" class="font-medium">Spider Size</label>
+                    <span id="scaleVal" class="font-mono text-slate-500">1.0</span>
+                </div>
+                <input type="range" id="scaleSlider" min="0.6" max="1.8" step="0.1" value="1.0" class="w-full accent-slate-900 bg-slate-200 rounded-lg cursor-pointer h-1.5">
+            </div>
+
+            <!-- Audio Effects Toggle -->
+            <div class="flex items-center justify-between pt-1">
+                <span class="font-medium text-slate-700">Footstep Audio (Synthesized)</span>
+                <input type="checkbox" id="audioToggle" class="w-4 h-4 accent-slate-900 cursor-pointer">
+            </div>
+
+            <!-- Center Spider Button -->
+            <button id="resetTargetBtn" class="w-full mt-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl transition shadow-md active:scale-95">
+                Reset Spider Position
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. THREE.JS SCENE SETUP & WHITE ENVIRONMENT ---
+        const container = document.getElementById('webgl-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf5f5f7);
+        scene.fog = new THREE.FogExp2(0xf5f5f7, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 14, 18);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.02; // Don't clip under ground
+        controls.minDistance = 4;
+        controls.maxDistance = 60;
+        controls.target.set(0, 0, 0);
+
+        // --- 2. LIGHTING & SHADOW MAPS ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.3);
+        mainLight.position.set(15, 30, 15);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 70;
+        mainLight.shadow.camera.left = -25;
+        mainLight.shadow.camera.right = 25;
+        mainLight.shadow.camera.top = 25;
+        mainLight.shadow.camera.bottom = -25;
+        mainLight.shadow.bias = -0.0003;
+        scene.add(mainLight);
+
+        const fillLight = new THREE.DirectionalLight(0xe2e8f0, 0.6);
+        fillLight.position.set(-15, 20, -15);
+        scene.add(fillLight);
+
+        // Ground Plane receiving soft contact shadows
+        const groundGeo = new THREE.PlaneGeometry(300, 300);
+        const groundMat = new THREE.MeshStandardMaterial({
+            color: 0xf5f5f7,
+            roughness: 0.95,
+            metalness: 0.02
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Target Cursor Indicator
+        const targetRingGeo = new THREE.RingGeometry(0.3, 0.42, 32);
+        const targetRingMat = new THREE.MeshBasicMaterial({ color: 0x0f172a, side: THREE.DoubleSide, transparent: true, opacity: 0.35 });
+        const targetRing = new THREE.Mesh(targetRingGeo, targetRingMat);
+        targetRing.rotation.x = -Math.PI / 2;
+        targetRing.position.y = 0.015;
+        scene.add(targetRing);
+
+        // --- 3. CONFIG & AUDIO SYNTHESIZER ---
+        const config = {
+            camMode: 'orbit',
+            speed: 0.12,
+            stepHeight: 0.5,
+            scale: 1.0,
+            audioEnabled: false
+        };
+
+        const targetPos = new THREE.Vector3(0, 0, 0);
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Web Audio Footstep Generator (No external audio files needed)
+        let audioCtx = null;
+        function playFootstepSound() {
+            if (!config.audioEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(120 + Math.random() * 40, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.04);
+                
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.04);
+            } catch(e) {}
+        }
+
+        // --- 4. ULTRA-REALISTIC SPIDER 3D ENGINE (ROBUST IK) ---
+        class UltraSpider3D {
+            constructor() {
+                this.group = new THREE.Group();
+                
+                this.pos = new THREE.Vector3(0, 0, 0);
+                this.bodyHeight = 0.85;
+                this.heading = 0;
+                
+                this.pitch = 0;
+                this.roll = 0;
+                this.walkCycle = 0;
+
+                // Anatomic Segment Specifications
+                this.boneLengths = {
+                    coxa: 0.5,   // Base hip segment
+                    femur: 1.3,  // Upper leg segment (A)
+                    tibia: 1.6   // Lower leg segment (B)
+                };
+
+                // Organic Chitin Materials
+                this.matCarapace = new THREE.MeshStandardMaterial({ color: 0x111116, roughness: 0.3, metalness: 0.25 });
+                this.matAbdomen = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.65, metalness: 0.08 });
+                this.matLegSegmentA = new THREE.MeshStandardMaterial({ color: 0x0f0e13, roughness: 0.35, metalness: 0.2 });
+                this.matLegSegmentB = new THREE.MeshStandardMaterial({ color: 0x262322, roughness: 0.5, metalness: 0.1 });
+                this.matJoint = new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.25 });
+                this.matEye = new THREE.MeshStandardMaterial({ color: 0x020202, roughness: 0.05, metalness: 0.95 });
+
+                this.buildBodyParts();
+                this.buildLegMechanics();
+
+                scene.add(this.group);
+            }
+
+            buildBodyParts() {
+                this.bodyGroup = new THREE.Group();
+
+                // 1. Cephalothorax (Head/Carapace)
+                const carapaceGeo = new THREE.SphereGeometry(0.75, 24, 20);
+                carapaceGeo.scale(1, 0.52, 1.25);
+                const carapace = new THREE.Mesh(carapaceGeo, this.matCarapace);
+                carapace.castShadow = true;
+                carapace.receiveShadow = true;
+                this.bodyGroup.add(carapace);
+
+                // 2. Abdomen (Sculpted with subtle rings)
+                const abdGeo = new THREE.SphereGeometry(1.2, 24, 24);
+                abdGeo.scale(1, 0.85, 1.5);
+                const abdomen = new THREE.Mesh(abdGeo, this.matAbdomen);
+                abdomen.position.set(0, 0.25, -1.7);
+                abdomen.castShadow = true;
+                this.bodyGroup.add(abdomen);
+
+                // Pedicel Connector
+                const pedicel = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.28, 0.32, 0.45, 12),
+                    this.matJoint
+                );
+                pedicel.rotation.x = Math.PI / 2;
+                pedicel.position.set(0, 0.1, -0.8);
+                this.bodyGroup.add(pedicel);
+
+                // 3. Arachnid Eyes (8 Glossy Ocelli)
+                const eyeCluster = [
+                    { x: -0.2, y: 0.24, z: 0.86, r: 0.08 }, { x: 0.2, y: 0.24, z: 0.86, r: 0.08 },
+                    { x: -0.38, y: 0.19, z: 0.8, r: 0.065 }, { x: 0.38, y: 0.19, z: 0.8, r: 0.065 },
+                    { x: -0.12, y: 0.35, z: 0.82, r: 0.055 }, { x: 0.12, y: 0.35, z: 0.82, r: 0.055 },
+                    { x: -0.32, y: 0.32, z: 0.75, r: 0.05 },  { x: 0.32, y: 0.32, z: 0.75, r: 0.05 }
+                ];
+                eyeCluster.forEach(e => {
+                    const m = new THREE.Mesh(new THREE.SphereGeometry(e.r, 12, 12), this.matEye);
+                    m.position.set(e.x, e.y, e.z);
+                    this.bodyGroup.add(m);
+                });
+
+                // 4. Chelicerae & Fangs
+                [-0.18, 0.18].forEach(x => {
+                    const cheli = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.42, 0.32), this.matCarapace);
+                    cheli.position.set(x, -0.2, 0.95);
+                    cheli.rotation.x = 0.22;
+                    cheli.castShadow = true;
+                    this.bodyGroup.add(cheli);
+
+                    const fang = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.3, 8), this.matEye);
+                    fang.position.set(x * 0.85, -0.42, 1.05);
+                    fang.rotation.x = Math.PI / 2.6;
+                    this.bodyGroup.add(fang);
+                });
+
+                // 5. Pedipalps (Sensory Front Arms)
+                [-0.34, 0.34].forEach(x => {
+                    const palp = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.65, 8), this.matLegSegmentA);
+                    palp.position.set(x, -0.12, 1.1);
+                    palp.rotation.x = 0.55;
+                    palp.rotation.z = x > 0 ? -0.25 : 0.25;
+                    palp.castShadow = true;
+                    this.bodyGroup.add(palp);
+                });
+
+                this.group.add(this.bodyGroup);
+            }
+
+            buildLegMechanics() {
+                this.legs = [];
+                // Anatomic leg attachment points around carapace
+                const legAngles = [
+                    Math.PI * 0.22, Math.PI * 0.38, Math.PI * 0.62, Math.PI * 0.78,  // Left 1-4
+                    -Math.PI * 0.22, -Math.PI * 0.38, -Math.PI * 0.62, -Math.PI * 0.78 // Right 1-4
+                ];
+
+                for (let i = 0; i < 8; i++) {
+                    const isRight = i >= 4;
+                    const angle = legAngles[i];
+                    const radius = 2.7;
+
+                    const hipOffset = new THREE.Vector3(Math.sin(angle) * 0.65, 0, Math.cos(angle) * 0.65);
+                    const restOffset = new THREE.Vector3(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+
+                    // 3D Visual Mesh Hierarchy for each leg
+                    const hipJointMesh = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), this.matJoint);
+                    const kneeJointMesh = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), this.matJoint);
+                    
+                    // Femur Mesh
+                    const femurGeo = new THREE.CylinderGeometry(0.1, 0.07, this.boneLengths.femur, 10);
+                    femurGeo.translate(0, this.boneLengths.femur / 2, 0);
+                    const femurMesh = new THREE.Mesh(femurGeo, this.matLegSegmentA);
+                    femurMesh.castShadow = true;
+
+                    // Tibia Mesh
+                    const tibiaGeo = new THREE.CylinderGeometry(0.07, 0.03, this.boneLengths.tibia, 10);
+                    tibiaGeo.translate(0, this.boneLengths.tibia / 2, 0);
+                    const tibiaMesh = new THREE.Mesh(tibiaGeo, this.matLegSegmentB);
+                    tibiaMesh.castShadow = true;
+
+                    scene.add(hipJointMesh);
+                    scene.add(kneeJointMesh);
+                    scene.add(femurMesh);
+                    scene.add(tibiaMesh);
+
+                    this.legs.push({
+                        index: i,
+                        isRight,
+                        hipOffset,
+                        restOffset,
+                        currentFootPos: restOffset.clone(),
+                        targetFootPos: restOffset.clone(),
+                        stepStartPos: restOffset.clone(),
+                        stepProgress: 1.0,
+                        hipJointMesh, kneeJointMesh, femurMesh, tibiaMesh
+                    });
+                }
+            }
+
+            // ROBUST 3D INVERSE KINEMATICS (2-Bone Trigonometric System)
+            solveLegIK(hipPos, footPos, lenA, lenB) {
+                const dir = new THREE.Vector3().subVectors(footPos, hipPos);
+                const totalDist = dir.length();
+
+                // Clamping distance prevents leg stretching / NaN mathematical breaks
+                const maxLen = lenA + lenB - 0.01;
+                const minLen = Math.abs(lenA - lenB) + 0.05;
+                const clampedDist = THREE.MathUtils.clamp(totalDist, minLen, maxLen);
+
+                dir.normalize();
+
+                // Law of Cosines for Femur angle relative to Hip-Foot vector
+                const cosFemur = (lenA * lenA + clampedDist * clampedDist - lenB * lenB) / (2 * lenA * clampedDist);
+                const femurAngle = Math.acos(THREE.MathUtils.clamp(cosFemur, -1, 1));
+
+                // Natural upward arch direction (plane perpendicular
